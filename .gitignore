@@ -1,0 +1,33 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore environment files
+.env
+.env.*   # optional, if you use multiple env files
+
+# Ignore virtual environments
+venv/
+env/
+.venv/
+.envrc
+
+# Ignore logs
+*.log
+
+# Ignore CSV / data outputs
+data/
+*.csv
+
+# Ignore database files (SQLite, etc.)
+*.db
+*.sqlite3
+
+# Ignore Python bytecode
+*.pyc
+
+# Ignore pytest cache
+.pytest_cache/
+
+# I

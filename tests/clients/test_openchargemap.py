@@ -1,12 +1,15 @@
+import os
 import pytest
 import requests
 
-from poi_ingestion.clients.openchargemap import (
-    fetch_pois,
-    OpenChargeMapError,
-)
+from poi_ingestion.clients.openchargemap import fetch_pois, OpenChargeMapError
 
 BASE_URL = "https://api.openchargemap.io/v3/poi"
+
+# Automatically set a dummy API key for all tests
+@pytest.fixture(autouse=True)
+def set_api_key(monkeypatch):
+    monkeypatch.setenv("OPENCHARGEMAP_API_KEY", "test-key")
 
 
 def test_fetch_pois_success(requests_mock):
@@ -14,7 +17,6 @@ def test_fetch_pois_success(requests_mock):
         {"ID": 1, "AddressInfo": {"CountryID": 87}},
         {"ID": 2, "AddressInfo": {"CountryID": 87}},
     ]
-
     requests_mock.get(BASE_URL, json=mock_response, status_code=200)
 
     result = fetch_pois(country_code="DE")
@@ -46,7 +48,10 @@ def test_fetch_pois_invalid_json(requests_mock):
         fetch_pois(country_code="FR")
 
 
-def test_fetch_pois_invalid_country_code():
+def test_fetch_pois_invalid_country_code(monkeypatch):
+    # Ensure dummy API key is present
+    monkeypatch.setenv("OPENCHARGEMAP_API_KEY", "test-key")
+
     with pytest.raises(ValueError):
         fetch_pois(country_code="")
 
