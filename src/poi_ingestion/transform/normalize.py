@@ -1,4 +1,7 @@
+import logging
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 def normalize_pois(pois_json: list) -> pd.DataFrame:
     """
@@ -12,6 +15,10 @@ def normalize_pois(pois_json: list) -> pd.DataFrame:
         sep="_",
         errors='ignore'
     )
+
+    if df.empty:
+        logger.warning("normalize_pois produced an empty DataFrame ⚠️")
+
     return df
 
 
