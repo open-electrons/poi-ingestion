@@ -1,31 +1,34 @@
 import pandas as pd
 
-def normalize_pois(pois):
-    rows = []
-    for p in pois:
-        addr = p.get("AddressInfo", {})
-        rows.append({
-            "id": p.get("ID"),
-            "uuid": p.get("UUID"),
-            "title": addr.get("Title"),
-            "latitude": addr.get("Latitude"),
-            "longitude": addr.get("Longitude"),
-            "town": addr.get("Town"),
-            "postcode": addr.get("Postcode"),
-            "number_of_points": p.get("NumberOfPoints"),
-            "raw": p
-        })
-    return pd.DataFrame(rows)
+def normalize_pois(pois_json: list) -> pd.DataFrame:
+    """
+    Flatten POI JSON into a DataFrame.
+    """
+    if not pois_json:
+        return pd.DataFrame()
 
-def normalize_connections(pois):
+    df = pd.json_normalize(
+        pois_json,
+        sep="_",
+        errors='ignore'
+    )
+    return df
+
+
+def normalize_connections(pois_json: list) -> pd.DataFrame:
+    """
+    Flatten Connections into a separate DataFrame linked by POI ID.
+    """
     rows = []
-    for p in pois:
-        for c in p.get("Connections", []):
-            rows.append({
-                "id": c.get("ID"),
-                "poi_id": p.get("ID"),
-                "power_kw": c.get("PowerKW"),
-                "quantity": c.get("Quantity"),
-                "raw": c
-            })
-    return pd.DataFrame(rows)
+    for poi in pois_json:
+        poi_id = poi.get("ID")
+        for conn in poi.get("Connections", []):
+            conn_row = conn.copy()
+            conn_row["POI_ID"] = poi_id
+            rows.append(conn_row)
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.json_normalize(rows, sep="_", errors='ignore')
+    return df

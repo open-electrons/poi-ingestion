@@ -1,0 +1,117 @@
+from pathlib import Path
+import pycountry
+import sys
+import json
+from typing import Optional, List
+import time
+import os
+
+# Add src folder to sys.path
+sys.path.append(str(Path(__file__).parent / "src"))
+
+from poi_ingestion.clients.openchargemap import fetch_pois
+from poi_ingestion.transform.normalize import normalize_pois, normalize_connections
+from poi_ingestion.db.repository import engine, upsert_dataframe
+
+# Optional: load environment variables if using Supabase
+from dotenv import load_dotenv
+load_dotenv()
+
+DATA_RAW = Path("data/raw")
+DATA_RAW.mkdir(parents=True, exist_ok=True)
+
+
+def save_pois_to_json(pois: list, file_path: Path, country_code: str):
+    """Save a list of POIs to a JSON file."""
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(pois, f, ensure_ascii=False, indent=2)
+    print(f"Saved {len(pois)} POIs for {country_code} to {file_path}")
+
+
+def fetch_and_save_country_pois(country_codes: Optional[List[str]] = None):
+    """
+    Fetch POIs for given ISO country codes, save each as a separate JSON.
+    If no list is provided, fetch all countries.
+    """
+    if country_codes is None:
+        country_codes = [c.alpha_2 for c in pycountry.countries]
+
+    for code in country_codes:
+        code = code.upper()
+        file_path = DATA_RAW / f"pois_{code}.json"
+
+        if file_path.exists():
+            print(f"{file_path} already exists, skipping...")
+            continue
+
+        try:
+            pois = fetch_pois(country_code=code)
+            time.sleep(1)  # avoid hitting API rate limits
+        except Exception as e:
+            print(f"Error fetching {code}: {e}")
+            continue
+
+        if not pois:
+            print(f"No POIs for {code}, skipping...")
+            continue
+
+        save_pois_to_json(pois, file_path, code)
+
+
+def merge_country_jsons(output_file: Path = DATA_RAW / "pois_all.json"):
+    """
+    Merge all per-country JSON files into one big JSON file.
+    """
+    all_pois = []
+
+    for json_file in DATA_RAW.glob("pois_*.json"):
+        print(f"Reading {json_file}")
+        with open(json_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            code = json_file.stem.split("_")[1]
+            for poi in data:
+                poi["country_code"] = code
+            all_pois.extend(data)
+
+    print(f"Merging complete: {len(all_pois)} total POIs")
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(all_pois, f, ensure_ascii=False, indent=2)
+
+    print(f"Merged JSON saved to {output_file}")
+
+
+def process_json_to_db(json_file: Path):
+    """
+    Load JSON, normalize POIs and Connections, insert into DB.
+    """
+    if not json_file.exists():
+        print(f"{json_file} does not exist.")
+        return
+
+    with open(json_file, "r", encoding="utf-8") as f:
+        pois_json = json.load(f)
+
+    df_pois = normalize_pois(pois_json)
+    df_connections = normalize_connections(pois_json)
+
+    upsert_dataframe(df_pois, "pois")
+    upsert_dataframe(df_connections, "connections")
+
+
+def main():
+    print("Step 1: Fetch and save per-country JSONs")
+    fetch_and_save_country_pois(["DE", "FR", "JP"])  # can pass None for all countries
+
+    print("\nStep 2: Merge all country JSONs into one file")
+    merged_file = DATA_RAW / "pois_all.json"
+    merge_country_jsons(merged_file)
+
+    print("\nStep 3: Normalize and insert into database")
+    process_json_to_db(merged_file)
+
+    print("\nDone! Database contains POIs and Connections.")
+
+
+if __name__ == "__main__":
+    main()

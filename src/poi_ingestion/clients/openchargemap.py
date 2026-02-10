@@ -6,6 +6,14 @@ from typing import List, Dict, Optional
 BASE_URL = "https://api.openchargemap.io/v3/poi"
 DEFAULT_TIMEOUT = 30
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # loads .env file automatically
+
+OPENCHARGEMAP_API_KEY = os.getenv("OPENCHARGEMAP_API_KEY")
+if not OPENCHARGEMAP_API_KEY:
+    raise ValueError("OPENCHARGEMAP_API_KEY is not set")
 
 class OpenChargeMapError(Exception):
     pass
@@ -25,10 +33,6 @@ def fetch_pois(
     Returns:
         List of POI JSON objects
     """
-    # ✅ Lazy-load API key at runtime (allows monkeypatching in tests)
-    import os
-    OPENCHARGEMAP_API_KEY = os.getenv("OPENCHARGEMAP_API_KEY", "")
-
     country_code = country_code.upper()
 
     # Length check
