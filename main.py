@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 from poi_ingestion.clients.openchargemap import fetch_pois
 from poi_ingestion.transform.normalize import normalize_pois, normalize_connections
 from poi_ingestion.db.repository import engine, upsert_dataframe
+from poi_ingestion.service.poi_processor import process_json_to_db
 
 # Optional: load environment variables if using Supabase
 from dotenv import load_dotenv
@@ -86,24 +87,6 @@ def merge_country_jsons(output_file: Path = DATA_RAW / "pois_all.json"):
         json.dump(all_pois, f, ensure_ascii=False, indent=2)
 
     logger.info(f"Merged JSON saved to {output_file}")
-
-
-def process_json_to_db(json_file: Path):
-    """
-    Load JSON, normalize POIs and Connections, insert into DB.
-    """
-    if not json_file.exists():
-        logger.error(f"[ERROR] ❌ {json_file} does not exist — could not load to database")
-        return
-
-    with open(json_file, "r", encoding="utf-8") as f:
-        pois_json = json.load(f)
-
-    df_pois = normalize_pois(pois_json)
-    df_connections = normalize_connections(pois_json)
-
-    upsert_dataframe(df_pois, "pois")
-    upsert_dataframe(df_connections, "connections")
 
 
 def main():

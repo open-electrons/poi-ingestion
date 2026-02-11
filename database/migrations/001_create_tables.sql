@@ -3,7 +3,7 @@
 -- 1️⃣ POIs table first
 CREATE TABLE IF NOT EXISTS pois (
     id BIGINT PRIMARY KEY,
-    country_code CHAR(2),
+    country_code VARCHAR(10),
     title TEXT,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
