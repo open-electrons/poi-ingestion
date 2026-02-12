@@ -19,52 +19,99 @@ logger = logging.getLogger(__name__)
 def upsert_dataframe(df: pd.DataFrame, table_name: str, engine, chunksize: int = 1000):
     """
     UPSERT a DataFrame into a PostgreSQL table.
+
     - Only inserts columns that exist in the DB table
     - Converts dict/list columns to JSON strings
+    - Automatically coerces numeric types to match DB schema
     - Supports chunked inserts
     """
+
     if df.empty:
         logger.warning(f"⚠️ No data to insert into {table_name}")
         return
 
-    # Convert object columns (dict/list) to JSON strings
-    for col in df.columns:
-        if df[col].dtype == "object":
-            df[col] = df[col].apply(
-                lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (dict, list)) else x
-            )
+    # Always work on a copy (prevents SettingWithCopyWarning)
+    df = df.copy()
 
     # Load table schema
     metadata = MetaData()
     table = Table(table_name, metadata, autoload_with=engine)
 
-    table_columns = [c.name for c in table.columns]
+    table_columns = {c.name: c for c in table.columns}
 
-    # Filter DataFrame columns to those present in the table
-    df_to_insert = df[[col for col in df.columns if col in table_columns]]
+    # --------------------------------------------------
+    # 1️⃣ Type coercion based on DB column types
+    # --------------------------------------------------
+    for col_name, column in table_columns.items():
+        if col_name not in df.columns:
+            continue
 
-    # Optional: store all extra fields as raw_json
+        try:
+            if column.type.python_type == int:
+                df[col_name] = pd.to_numeric(df[col_name], errors="coerce").astype("Int64")
+            elif column.type.python_type == float:
+                df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
+        except Exception:
+            # Some types (e.g. JSONB) don’t expose python_type cleanly
+            pass
+
+    # --------------------------------------------------
+    # 2️⃣ Convert dict/list columns to JSON strings
+    # --------------------------------------------------
+    for col in df.columns:
+        if df[col].dtype == "object":
+            df[col] = df[col].apply(
+                lambda x: json.dumps(x, ensure_ascii=False)
+                if isinstance(x, (dict, list))
+                else x
+            )
+
+    # --------------------------------------------------
+    # 3️⃣ Keep only columns existing in DB table
+    # --------------------------------------------------
+    df_to_insert = df[[col for col in df.columns if col in table_columns]].copy()
+
+    # --------------------------------------------------
+    # 4️⃣ Store extra fields in raw_json (if exists)
+    # --------------------------------------------------
     extra_columns = [c for c in df.columns if c not in table_columns]
+
     if extra_columns and "raw_json" in table_columns:
-        df_to_insert["raw_json"] = df[extra_columns].apply(
+        df_to_insert.loc[:, "raw_json"] = df[extra_columns].apply(
             lambda r: json.dumps(r.to_dict(), ensure_ascii=False), axis=1
         )
     elif extra_columns:
         logger.warning(f"⚠️ Table {table_name} has no 'raw_json' column. Extra fields ignored.")
 
+    # --------------------------------------------------
+    # 5️⃣ Remove duplicate conflict keys (prevents cardinality violation)
+    # --------------------------------------------------
+    if table_name == "pois":
+        conflict_keys = ["poi_uuid"]
+    elif table_name == "connections":
+        conflict_keys = ["poi_uuid", "connection_id"]
+    else:
+        conflict_keys = [col.name for col in table.primary_key.columns]
+
+    df_to_insert = df_to_insert.drop_duplicates(subset=conflict_keys)
+
     records = df_to_insert.to_dict(orient="records")
 
-    # Determine conflict keys based on table
-    conflict_keys = ["poi_uuid"] if table_name == "pois" else ["poi_uuid", "connection_id"]
-
-    # Insert in chunks
+    # --------------------------------------------------
+    # 6️⃣ Perform chunked UPSERT
+    # --------------------------------------------------
     for i in range(0, len(records), chunksize):
         batch = records[i:i + chunksize]
+
         stmt = insert(table).values(batch)
 
         stmt = stmt.on_conflict_do_update(
             index_elements=conflict_keys,
-            set_={col: stmt.excluded[col] for col in df_to_insert.columns if col not in conflict_keys}
+            set_={
+                col: stmt.excluded[col]
+                for col in df_to_insert.columns
+                if col not in conflict_keys
+            },
         )
 
         with engine.begin() as conn:
