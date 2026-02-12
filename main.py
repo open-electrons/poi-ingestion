@@ -4,14 +4,13 @@ import sys
 import json
 from typing import Optional, List
 import time
-import os
 
 # Add src folder to sys.path
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from poi_ingestion.clients.openchargemap import fetch_pois
 from poi_ingestion.transform.normalize import normalize_pois, normalize_connections
-from poi_ingestion.db.repository import engine, upsert_dataframe
+from poi_ingestion.db.repository import upsert_dataframe
 from poi_ingestion.service.poi_processor import process_json_to_db
 
 # Optional: load environment variables if using Supabase

@@ -30,3 +30,6 @@ CREATE TABLE IF NOT EXISTS connections (
 -- 3️⃣ Indexes
 CREATE INDEX IF NOT EXISTS idx_pois_country ON pois(country_code);
 CREATE INDEX IF NOT EXISTS idx_connections_poi ON connections(poi_uuid);
+
+ALTER TABLE pois ADD COLUMN payload_hash TEXT;
+ALTER TABLE connections ADD COLUMN payload_hash TEXT;

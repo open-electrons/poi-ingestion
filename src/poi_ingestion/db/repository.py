@@ -6,7 +6,7 @@ DB_URL = os.getenv("DB_URL")
 if not DB_URL:
     raise ValueError("❌ DB_URL environment variable is not set. Please set it in your .env file.")
 
-engine = create_engine(DB_URL)
+engine = create_engine(DB_URL, echo=False)
 
 import json
 import pandas as pd
@@ -15,6 +15,10 @@ from sqlalchemy import MetaData, Table
 from sqlalchemy.dialects.postgresql import insert
 
 logger = logging.getLogger(__name__)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+import hashlib
+
 
 def upsert_dataframe(df: pd.DataFrame, table_name: str, engine, chunksize: int = 1000):
     """
@@ -83,6 +87,18 @@ def upsert_dataframe(df: pd.DataFrame, table_name: str, engine, chunksize: int =
     elif extra_columns:
         logger.warning(f"⚠️ Table {table_name} has no 'raw_json' column. Extra fields ignored.")
 
+    # -----------------------------
+    # 🔥 ADD HASH
+    # -----------------------------
+    if "payload_hash" in table_columns:
+        def compute_hash(row):
+            # Only hash real data columns (exclude row_hash itself)
+            row_dict = {k: row[k] for k in df_to_insert.columns if k != "payload_hash"}
+            row_string = json.dumps(row_dict, sort_keys=True, default=str)
+            return hashlib.sha256(row_string.encode("utf-8")).hexdigest()
+
+        df_to_insert.loc[:, "payload_hash"] = df_to_insert.apply(compute_hash, axis=1)
+
     # --------------------------------------------------
     # 5️⃣ Remove duplicate conflict keys (prevents cardinality violation)
     # --------------------------------------------------
@@ -100,22 +116,44 @@ def upsert_dataframe(df: pd.DataFrame, table_name: str, engine, chunksize: int =
     # --------------------------------------------------
     # 6️⃣ Perform chunked UPSERT
     # --------------------------------------------------
+    # Insert in chunks
+    total_affected_rows = 0
     for i in range(0, len(records), chunksize):
         batch = records[i:i + chunksize]
-
         stmt = insert(table).values(batch)
-
-        stmt = stmt.on_conflict_do_update(
-            index_elements=conflict_keys,
-            set_={
-                col: stmt.excluded[col]
-                for col in df_to_insert.columns
-                if col not in conflict_keys
-            },
-        )
+        logger.debug(stmt)
+        # -----------------------------
+        # 🔥 CONDITIONAL UPDATE
+        # -----------------------------
+        if "payload_hash" in table_columns:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=conflict_keys,
+                set_={
+                    col: stmt.excluded[col]
+                    for col in df_to_insert.columns
+                    if col not in conflict_keys
+                },
+                where=table.c.payload_hash.is_distinct_from(
+                    stmt.excluded.payload_hash
+                )
+            )
+        else:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=conflict_keys,
+                set_={
+                    col: stmt.excluded[col]
+                    for col in df_to_insert.columns
+                    if col not in conflict_keys
+                }
+            )
 
         with engine.begin() as conn:
-            conn.execute(stmt)
+            result = conn.execute(stmt)
+            total_affected_rows += result.rowcount
 
-    logger.info(f"✅ Upserted {len(df_to_insert)} rows into {table_name}")
+    logger.info(
+        f"✅ Attempted: {len(df_to_insert)} | "
+        f"Inserted/Updated: {total_affected_rows} | "
+        f"Skipped: {len(df_to_insert) - total_affected_rows}"
+    )
 
