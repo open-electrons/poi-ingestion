@@ -1,9 +1,9 @@
 -- 001_create_tables.sql
 
--- 1️⃣ POIs table first
+-- POIs table
 CREATE TABLE IF NOT EXISTS pois (
-    id BIGINT PRIMARY KEY,
-    country_code VARCHAR(10),
+    poi_uuid TEXT PRIMARY KEY,
+    country_code VARCHAR(2),
     title TEXT,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
@@ -12,19 +12,21 @@ CREATE TABLE IF NOT EXISTS pois (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- 2️⃣ Connections table next
+-- Connections table
 CREATE TABLE IF NOT EXISTS connections (
-    id BIGINT PRIMARY KEY,
-    poi_id BIGINT NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+    id BIGSERIAL PRIMARY KEY,
+    poi_uuid TEXT NOT NULL REFERENCES pois(poi_uuid) ON DELETE CASCADE,
+    connection_id BIGINT,
     connection_type TEXT,
     power_kw DOUBLE PRECISION,
     voltage INTEGER,
     amperage INTEGER,
     raw_json JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (poi_uuid, connection_id)
 );
 
 -- 3️⃣ Indexes
 CREATE INDEX IF NOT EXISTS idx_pois_country ON pois(country_code);
-CREATE INDEX IF NOT EXISTS idx_connections_poi ON connections(poi_id);
+CREATE INDEX IF NOT EXISTS idx_connections_poi ON connections(poi_uuid);

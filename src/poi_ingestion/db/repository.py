@@ -45,22 +45,26 @@ def upsert_dataframe(df: pd.DataFrame, table_name: str, engine, chunksize: int =
 
     # Optional: store all extra fields as raw_json
     extra_columns = [c for c in df.columns if c not in table_columns]
-    if extra_columns:
-        df_to_insert["raw_json"] = df[extra_columns].apply(lambda r: json.dumps(r.to_dict(), ensure_ascii=False), axis=1)
-        if "raw_json" not in table_columns:
-            logger.warning(f"⚠️ Table {table_name} has no 'raw_json' column. Extra fields ignored.")
+    if extra_columns and "raw_json" in table_columns:
+        df_to_insert["raw_json"] = df[extra_columns].apply(
+            lambda r: json.dumps(r.to_dict(), ensure_ascii=False), axis=1
+        )
+    elif extra_columns:
+        logger.warning(f"⚠️ Table {table_name} has no 'raw_json' column. Extra fields ignored.")
 
     records = df_to_insert.to_dict(orient="records")
+
+    # Determine conflict keys based on table
+    conflict_keys = ["poi_uuid"] if table_name == "pois" else ["poi_uuid", "connection_id"]
 
     # Insert in chunks
     for i in range(0, len(records), chunksize):
         batch = records[i:i + chunksize]
         stmt = insert(table).values(batch)
 
-        # UPSERT on primary key
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
-            set_={col: stmt.excluded[col] for col in df_to_insert.columns if col != "id"}
+            index_elements=conflict_keys,
+            set_={col: stmt.excluded[col] for col in df_to_insert.columns if col not in conflict_keys}
         )
 
         with engine.begin() as conn:
