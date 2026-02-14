@@ -30,4 +30,9 @@ data/
 # Ignore pytest cache
 .pytest_cache/
 
-# I
+# Code Coverage Results
+htmlcov/*.*
+.coverage
+
+# Random folders and files
+.DS_Store

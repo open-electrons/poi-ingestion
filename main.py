@@ -90,7 +90,7 @@ def merge_country_jsons(output_file: Path = DATA_RAW / "pois_all.json"):
 
 def main():
     logger.info("\nStep 1: Fetch and save per-country JSONs")
-    fetch_and_save_country_pois(["DE", "FR", "JP"])  # can pass None for all countries
+    fetch_and_save_country_pois(None) # (["DE", "FR", "JP"])  # can pass None for all countries
 
     logger.info("\nStep 2: Merge all country JSONs into one file")
     merged_file = DATA_RAW / "pois_all.json"

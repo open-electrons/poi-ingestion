@@ -1,6 +1,5 @@
 import json
 import os
-import hashlib
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -126,10 +125,10 @@ def process_json_to_db(json_file: Path):
     else:
         logger.warning("⚠️ No connections extracted")
 
-    try:
-        os.remove(json_file)
-        logger.info("✅ Removed Consolidates JSON file")
-    except FileNotFoundError:
-        pass
+    # try:
+        # os.remove(json_file)
+        # logger.info("✅ Removed Consolidates JSON file")
+    # except FileNotFoundError:
+      #  pass
 
     logger.info(f"🎉 Finished processing {json_file.name}")
