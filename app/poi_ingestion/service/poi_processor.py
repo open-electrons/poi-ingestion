@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -9,6 +8,7 @@ from poi_ingestion.transform.normalize import normalize_pois, normalize_connecti
 from poi_ingestion.db.repository import engine, upsert_dataframe
 
 logger = logging.getLogger(__name__)
+
 
 def extract_pois(pois_json: list) -> pd.DataFrame:
     rows = []

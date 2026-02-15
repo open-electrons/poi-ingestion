@@ -1,4 +1,4 @@
-# src/poi_ingestion/db/repository.py
+# app/poi_ingestion/db/repository.py
 from sqlalchemy import create_engine
 import os
 

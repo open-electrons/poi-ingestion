@@ -3,6 +3,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
 def normalize_pois(pois_json: list) -> pd.DataFrame:
     """
     Flatten POI JSON into a DataFrame.

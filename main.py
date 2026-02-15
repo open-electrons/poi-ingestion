@@ -1,17 +1,16 @@
 from pathlib import Path
 import pycountry
-import sys
+import sys, os
 import json
 from typing import Optional, List
 import time
 
 # Add src folder to sys.path
-sys.path.append(str(Path(__file__).parent / "src"))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from poi_ingestion.clients.openchargemap import fetch_pois
-from poi_ingestion.transform.normalize import normalize_pois, normalize_connections
-from poi_ingestion.db.repository import upsert_dataframe
-from poi_ingestion.service.poi_processor import process_json_to_db
+from app.poi_ingestion.clients.openchargemap import fetch_pois
+from app.poi_ingestion.service.poi_processor import process_json_to_db
+
 
 # Optional: load environment variables if using Supabase
 from dotenv import load_dotenv
