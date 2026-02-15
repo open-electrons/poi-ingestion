@@ -34,3 +34,12 @@ For each connection:
 | Voltage | `Connections[].Voltage` | `voltage` | |
 | Amperage | `Connections[].Amps` | `amperage` | |
 | Everything else | full connection JSON | `raw_json` | JSONB backup |
+
+## Running the Application
+
+To visualize the ingested POI's, run the user interface as below:
+
+### macOS / Linux / Windows
+
+```bash
+python run_app.py
