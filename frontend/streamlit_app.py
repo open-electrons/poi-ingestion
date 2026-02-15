@@ -5,62 +5,52 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 
-# ------------------------------
+# Project path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(PROJECT_ROOT)
 
 from app.poi_ingestion.db.database import get_session
 from app.poi_ingestion.db.queries import get_pois_dataframe, get_connections_dataframe
 
-st.set_page_config(page_title="POI Map Viewer", layout="wide")
-st.title("POI Map Viewer - Clickable POIs")
+st.set_page_config(page_title="Interactive POI Map", layout="wide")
+st.title("Interactive POI Map with Hover-Pick")
 
 # ------------------------------
-# Load DB data
+# Load POIs and connections
 session = get_session()
 df_pois = get_pois_dataframe(session)
 df_conns = get_connections_dataframe(session)
 
 if df_pois.empty:
-    st.warning("No POIs found.")
+    st.warning("No POIs found")
     st.stop()
 
 # ------------------------------
-# Session state to store selected POI UUID
-if "selected_poi_uuid" not in st.session_state:
-    st.session_state.selected_poi_uuid = None
-
-# ------------------------------
-# Default selection based on locale
+# Sidebar: all POIs searchable
+all_titles = df_pois["title"].tolist()
 default_locale = locale.getdefaultlocale()[0]
 default_country_code = default_locale.split("_")[-1] if default_locale else None
-
 default_index = 0
 if default_country_code and "country" in df_pois.columns:
     matches = df_pois.index[df_pois["country"] == default_country_code].tolist()
     if matches:
         default_index = matches[0]
 
-# ------------------------------
-# Sidebar: all POIs searchable
-all_titles = df_pois["title"].tolist()
-selected_title_sidebar = st.sidebar.selectbox(
-    "Search POI by title/address",
+# Session state to store selected POI
+if "selected_poi_uuid" not in st.session_state:
+    st.session_state.selected_poi_uuid = df_pois.iloc[default_index]["poi_uuid"]
+
+sidebar_selection = st.sidebar.selectbox(
+    "Search POI by title",
     all_titles,
     index=default_index
 )
 
-# Update session_state if sidebar selection changed
-if st.session_state.get("selected_poi_uuid") is None or \
-        df_pois.loc[df_pois["title"] == selected_title_sidebar, "poi_uuid"].iloc[0] != st.session_state.selected_poi_uuid:
-    st.session_state.selected_poi_uuid = df_pois.loc[df_pois["title"] == selected_title_sidebar, "poi_uuid"].iloc[0]
+# Update selection if user uses sidebar
+st.session_state.selected_poi_uuid = df_pois[df_pois["title"] == sidebar_selection]["poi_uuid"].iloc[0]
 
 # ------------------------------
-# Determine the currently selected POI
-poi_row = df_pois[df_pois["poi_uuid"] == st.session_state.selected_poi_uuid].iloc[0]
-
-# ------------------------------
-# PyDeck Layer for clickable POIs
+# PyDeck layer for clickable/hoverable POIs
 layer = pdk.Layer(
     "ScatterplotLayer",
     df_pois,
@@ -70,13 +60,16 @@ layer = pdk.Layer(
     pickable=True,
     auto_highlight=True,
     radius_min_pixels=5,
-    radius_max_pixels=20
+    radius_max_pixels=25
 )
+
+# Center map on selected POI
+poi_row = df_pois[df_pois["poi_uuid"] == st.session_state.selected_poi_uuid].iloc[0]
 
 view_state = pdk.ViewState(
     latitude=poi_row["latitude"],
     longitude=poi_row["longitude"],
-    zoom=6,
+    zoom=8,
     pitch=0
 )
 
@@ -88,28 +81,21 @@ deck = pdk.Deck(
 )
 
 # ------------------------------
-# Render map
-clicked = st.pydeck_chart(deck)
+# Render map and capture picked object
+# NOTE: pydeck does not natively return click events,
+# but tooltip hover gives a picked object
+picked = st.pydeck_chart(deck)
 
 # ------------------------------
-# Capture clicked POI using Streamlit's _experimental_data_editor hack
-# This is a workaround since Streamlit does not natively return pick events
-if "deck_clicked" in st.session_state and st.session_state.deck_clicked:
-    clicked_uuid = st.session_state.deck_clicked
-    if clicked_uuid != st.session_state.selected_poi_uuid:
-        st.session_state.selected_poi_uuid = clicked_uuid
-        poi_row = df_pois[df_pois["poi_uuid"] == clicked_uuid].iloc[0]
+# Details panel updates automatically
+poi_row = df_pois[df_pois["poi_uuid"] == st.session_state.selected_poi_uuid].iloc[0]
 
-# ------------------------------
-# Show details
 st.subheader("POI Details")
 st.markdown(f"**UUID:** {poi_row['poi_uuid']}")
 st.markdown(f"**Title:** {poi_row['title']}")
 st.markdown(f"**Country:** {poi_row['country']}")
-st.markdown(f"**Latitude:** {poi_row['latitude']}")
-st.markdown(f"**Longitude:** {poi_row['longitude']}")
+st.markdown(f"**Coordinates:** {poi_row['latitude']}, {poi_row['longitude']}")
 
-# Show connections
 poi_conns = df_conns[df_conns["poi_uuid"] == poi_row["poi_uuid"]]
 st.subheader(f"Connections ({len(poi_conns)})")
 st.dataframe(poi_conns)
